@@ -2,26 +2,28 @@ package com.duckduckgo.autofill.impl.importing
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.duckduckgo.autofill.api.domain.app.LoginCredentials
-import com.duckduckgo.autofill.impl.encoding.UrlUnicodeNormalizerImpl
 import com.duckduckgo.autofill.impl.store.InternalAutofillStore
-import com.duckduckgo.autofill.impl.urlmatcher.AutofillDomainNameUrlMatcher
+import com.duckduckgo.common.test.CoroutineTestRule
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
 @RunWith(AndroidJUnit4::class)
-class DefaultExistingPasswordMatchDetectorTest {
+class DefaultExistingCredentialMatchDetectorTest {
 
+    @get:Rule
+    val coroutineTestRule: CoroutineTestRule = CoroutineTestRule()
     private val autofillStore: InternalAutofillStore = mock()
 
-    private val testee = DefaultExistingPasswordMatchDetector(
-        urlMatcher = AutofillDomainNameUrlMatcher(UrlUnicodeNormalizerImpl()),
+    private val testee = DefaultExistingCredentialMatchDetector(
         autofillStore = autofillStore,
+        dispatchers = coroutineTestRule.testDispatcherProvider,
     )
 
     @Test

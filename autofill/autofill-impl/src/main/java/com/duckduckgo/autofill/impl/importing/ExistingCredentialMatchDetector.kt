@@ -18,31 +18,34 @@ package com.duckduckgo.autofill.impl.importing
 
 import com.duckduckgo.autofill.api.domain.app.LoginCredentials
 import com.duckduckgo.autofill.impl.store.InternalAutofillStore
-import com.duckduckgo.autofill.impl.urlmatcher.AutofillUrlMatcher
+import com.duckduckgo.common.utils.DispatcherProvider
 import com.duckduckgo.di.scopes.AppScope
 import com.squareup.anvil.annotations.ContributesBinding
 import javax.inject.Inject
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.withContext
 
-interface ExistingPasswordMatchDetector {
+interface ExistingCredentialMatchDetector {
     suspend fun alreadyExists(newCredentials: LoginCredentials): Boolean
 }
 
 @ContributesBinding(AppScope::class)
-class DefaultExistingPasswordMatchDetector @Inject constructor(
-    private val urlMatcher: AutofillUrlMatcher,
+class DefaultExistingCredentialMatchDetector @Inject constructor(
     private val autofillStore: InternalAutofillStore,
-) : ExistingPasswordMatchDetector {
+    private val dispatchers: DispatcherProvider,
+) : ExistingCredentialMatchDetector {
 
     override suspend fun alreadyExists(newCredentials: LoginCredentials): Boolean {
-        val credentials = autofillStore.getAllCredentials().firstOrNull() ?: return false
+        return withContext(dispatchers.io()) {
+            val credentials = autofillStore.getAllCredentials().firstOrNull() ?: return@withContext false
 
-        return credentials.any { existing ->
-            existing.domain == newCredentials.domain &&
-                existing.username == newCredentials.username &&
-                existing.password == newCredentials.password &&
-                existing.domainTitle == newCredentials.domainTitle &&
-                existing.notes == newCredentials.notes
+            credentials.any { existing ->
+                existing.domain == newCredentials.domain &&
+                    existing.username == newCredentials.username &&
+                    existing.password == newCredentials.password &&
+                    existing.domainTitle == newCredentials.domainTitle &&
+                    existing.notes == newCredentials.notes
+            }
         }
     }
 }
