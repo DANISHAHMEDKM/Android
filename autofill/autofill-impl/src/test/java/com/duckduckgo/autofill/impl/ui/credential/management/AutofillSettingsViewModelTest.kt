@@ -18,9 +18,13 @@ package com.duckduckgo.autofill.impl.ui.credential.management
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.cash.turbine.test
+import com.duckduckgo.app.browser.api.WebViewCapabilityChecker
+import com.duckduckgo.app.browser.api.WebViewCapabilityChecker.WebViewCapability.DocumentStartJavaScript
+import com.duckduckgo.app.browser.api.WebViewCapabilityChecker.WebViewCapability.WebMessageListener
 import com.duckduckgo.app.browser.favicon.FaviconManager
 import com.duckduckgo.app.statistics.pixels.Pixel
 import com.duckduckgo.app.statistics.pixels.Pixel.PixelType.Count
+import com.duckduckgo.autofill.api.AutofillFeature
 import com.duckduckgo.autofill.api.AutofillSettingsLaunchSource
 import com.duckduckgo.autofill.api.AutofillSettingsLaunchSource.BrowserOverflow
 import com.duckduckgo.autofill.api.AutofillSettingsLaunchSource.BrowserSnackbar
@@ -78,6 +82,8 @@ import com.duckduckgo.autofill.impl.ui.credential.management.viewing.duckaddress
 import com.duckduckgo.autofill.impl.ui.credential.repository.DuckAddressStatusRepository
 import com.duckduckgo.autofill.impl.urlmatcher.AutofillDomainNameUrlMatcher
 import com.duckduckgo.common.test.CoroutineTestRule
+import com.duckduckgo.feature.toggles.api.FakeFeatureToggleFactory
+import com.duckduckgo.feature.toggles.api.Toggle.State
 import kotlin.reflect.KClass
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
@@ -121,6 +127,8 @@ class AutofillSettingsViewModelTest {
     private val autofillBreakageReportCanShowRules: AutofillBreakageReportCanShowRules = mock()
     private val autofillBreakageReportDataStore: AutofillSiteBreakageReportingDataStore = mock()
     private val urlMatcher = AutofillDomainNameUrlMatcher(UrlUnicodeNormalizerImpl())
+    private val webViewCapabilityChecker: WebViewCapabilityChecker = mock()
+    private val autofillFeature = FakeFeatureToggleFactory.create(AutofillFeature::class.java)
 
     private val testee = AutofillSettingsViewModel(
         autofillStore = mockStore,
@@ -140,6 +148,8 @@ class AutofillSettingsViewModelTest {
         autofillBreakageReportSender = autofillBreakageReportSender,
         autofillBreakageReportDataStore = autofillBreakageReportDataStore,
         autofillBreakageReportCanShowRules = autofillBreakageReportCanShowRules,
+        webViewCapabilityChecker = webViewCapabilityChecker,
+        autofillFeature = autofillFeature,
     )
 
     @Before
@@ -151,6 +161,10 @@ class AutofillSettingsViewModelTest {
             whenever(mockStore.getCredentialCount()).thenReturn(flowOf(0))
             whenever(neverSavedSiteRepository.neverSaveListCount()).thenReturn(emptyFlow())
             whenever(deviceAuthenticator.isAuthenticationRequiredForAutofill()).thenReturn(true)
+            whenever(webViewCapabilityChecker.isSupported(WebMessageListener)).thenReturn(true)
+            whenever(webViewCapabilityChecker.isSupported(DocumentStartJavaScript)).thenReturn(true)
+            autofillFeature.self().setRawStoredState(State(enable = true))
+            autofillFeature.canImportFromGooglePasswordManager().setRawStoredState(State(enable = true))
         }
     }
 
@@ -920,6 +934,45 @@ class AutofillSettingsViewModelTest {
         testee.updateCurrentSite(currentUrl = "example.com", privacyProtectionEnabled = true)
         testee.userCancelledSendBreakageReport()
         verify(pixel).fire(AUTOFILL_SITE_BREAKAGE_REPORT_CONFIRMATION_DISMISSED)
+    }
+
+    @Test
+    fun whenImportGooglePasswordsIsEnabledThenViewStateReflectsThat() = runTest {
+        testee.onViewCreated()
+        testee.importPasswordsViewState.test {
+            assertTrue(awaitItem().canImportFromGooglePasswords)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun whenImportGooglePasswordsFeatureFlagDisabledThenViewStateReflectsThat() = runTest {
+        autofillFeature.canImportFromGooglePasswordManager().setRawStoredState(State(enable = false))
+        testee.onViewCreated()
+        testee.importPasswordsViewState.test {
+            assertFalse(awaitItem().canImportFromGooglePasswords)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun whenImportGooglePasswordsFeatureDisabledDueToWebMessageListenerNotSupportedThenViewStateReflectsThat() = runTest {
+        whenever(webViewCapabilityChecker.isSupported(WebMessageListener)).thenReturn(false)
+        testee.onViewCreated()
+        testee.importPasswordsViewState.test {
+            assertFalse(awaitItem().canImportFromGooglePasswords)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun whenImportGooglePasswordsFeatureDisabledDueToDocumentStartJavascriptNotSupportedThenViewStateReflectsThat() = runTest {
+        whenever(webViewCapabilityChecker.isSupported(DocumentStartJavaScript)).thenReturn(false)
+        testee.onViewCreated()
+        testee.importPasswordsViewState.test {
+            assertFalse(awaitItem().canImportFromGooglePasswords)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 
     private fun List<ListModeCommand>.verifyHasCommandToShowDeleteAllConfirmation(expectedNumberOfCredentialsToDelete: Int) {

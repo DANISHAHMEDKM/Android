@@ -44,9 +44,12 @@ import com.duckduckgo.autofill.impl.R
 import com.duckduckgo.autofill.impl.databinding.FragmentImportGooglePasswordsWebflowBinding
 import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordResult.Companion.RESULT_KEY
 import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordsWebFlowViewModel.ViewState.Initializing
+import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordsWebFlowViewModel.ViewState.LoadStartPage
 import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordsWebFlowViewModel.ViewState.NavigatingBack
 import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordsWebFlowViewModel.ViewState.UserCancelledImportFlow
+import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordsWebFlowViewModel.ViewState.UserFinishedCannotImport
 import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordsWebFlowViewModel.ViewState.UserFinishedImportFlow
+import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordsWebFlowViewModel.ViewState.WebContentShowing
 import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordsWebFlowWebChromeClient.ProgressListener
 import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordsWebFlowWebViewClient.NewPageCallback
 import com.duckduckgo.autofill.impl.importing.gpm.webflow.autofill.NoOpAutofillCallback
@@ -135,7 +138,7 @@ class ImportGooglePasswordsWebFlowFragment :
         configureWebView()
         configureBackButtonHandler()
         observeViewState()
-        loadFirstWebpage()
+        viewModel.onViewCreated()
     }
 
     override fun onDestroyView() {
@@ -143,10 +146,11 @@ class ImportGooglePasswordsWebFlowFragment :
         binding = null
     }
 
-    private fun loadFirstWebpage() {
+    private fun loadFirstWebpage(url: String) {
         lifecycleScope.launch(dispatchers.main()) {
             autofillConfigurationJob.join()
-            binding?.webView?.loadUrl(STARTING_URL)
+            binding?.webView?.loadUrl(url)
+            viewModel.firstPageLoading()
         }
     }
 
@@ -157,8 +161,12 @@ class ImportGooglePasswordsWebFlowFragment :
                     when (viewState) {
                         is UserFinishedImportFlow -> exitFlowAsSuccess(viewState.bundle)
                         is UserCancelledImportFlow -> exitFlowAsCancellation(viewState.stage)
+                        is UserFinishedCannotImport -> exitFlowAsImpossibleToImport(viewState.bundle)
                         is NavigatingBack -> binding?.webView?.goBack()
-                        is Initializing -> {}
+                        is LoadStartPage -> loadFirstWebpage(viewState.initialLaunchUrl)
+                        is WebContentShowing, Initializing -> {
+                            // no-op
+                        }
                     }
                 }
             }
@@ -170,6 +178,10 @@ class ImportGooglePasswordsWebFlowFragment :
     }
 
     private fun exitFlowAsSuccess(resultBundle: Bundle) {
+        setFragmentResult(RESULT_KEY, resultBundle)
+    }
+
+    private fun exitFlowAsImpossibleToImport(resultBundle: Bundle) {
         setFragmentResult(RESULT_KEY, resultBundle)
     }
 
@@ -335,7 +347,6 @@ class ImportGooglePasswordsWebFlowFragment :
     }
 
     companion object {
-        private const val STARTING_URL = "https://passwords.google.com/options?ep=1"
         private const val CUSTOM_FLOW_TAB_ID = "import-passwords-webflow"
         private const val SELECT_CREDENTIALS_FRAGMENT_TAG = "autofillSelectCredentialsDialog"
     }

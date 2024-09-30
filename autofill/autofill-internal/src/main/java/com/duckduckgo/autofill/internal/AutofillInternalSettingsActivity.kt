@@ -150,7 +150,7 @@ class AutofillInternalSettingsActivity : DuckDuckGoActivity() {
                             observePasswordInputUpdates(jobId)
                         }
                         is CsvCredentialImportResult.Error -> {
-                            "Failed to import passwords due to an error".showSnackbar()
+                            FAILED_IMPORT_GENERIC_ERROR.showSnackbar()
                         }
                     }
                 }
@@ -168,7 +168,7 @@ class AutofillInternalSettingsActivity : DuckDuckGoActivity() {
                         observePasswordInputUpdates(resultDetails.importJobId)
                     }
                     Error -> {
-                        "Failed to import passwords due to an error".showSnackbar()
+                        FAILED_IMPORT_GENERIC_ERROR.showSnackbar()
                     }
                     is UserCancelled, null -> {
                     }
@@ -590,6 +590,8 @@ class AutofillInternalSettingsActivity : DuckDuckGoActivity() {
         fun intent(context: Context): Intent {
             return Intent(context, AutofillInternalSettingsActivity::class.java)
         }
+
+        private const val FAILED_IMPORT_GENERIC_ERROR = "Failed to import passwords due to an error"
 
         private val sampleUrlList = listOf(
             "fill.dev",

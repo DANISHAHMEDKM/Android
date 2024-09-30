@@ -18,10 +18,12 @@ package com.duckduckgo.autofill.impl.importing.gpm.webflow
 
 import android.os.Bundle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.duckduckgo.anvil.annotations.ContributesViewModel
 import com.duckduckgo.autofill.impl.importing.CredentialImporter
 import com.duckduckgo.autofill.impl.importing.CsvCredentialConverter
 import com.duckduckgo.autofill.impl.importing.CsvCredentialConverter.CsvCredentialImportResult
+import com.duckduckgo.autofill.impl.importing.gpm.feature.AutofillImportPasswordConfigStore
 import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordResult.Companion.RESULT_KEY_DETAILS
 import com.duckduckgo.autofill.impl.importing.gpm.webflow.ImportGooglePasswordsWebFlowViewModel.ViewState.Initializing
 import com.duckduckgo.common.utils.DispatcherProvider
@@ -29,6 +31,7 @@ import com.duckduckgo.di.scopes.ActivityScope
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 @ContributesViewModel(ActivityScope::class)
@@ -43,8 +46,17 @@ class ImportGooglePasswordsWebFlowViewModel @Inject constructor() : ViewModel() 
     @Inject
     lateinit var csvCredentialConverter: CsvCredentialConverter
 
+    @Inject
+    lateinit var autofillImportConfigStore: AutofillImportPasswordConfigStore
+
     private val _viewState = MutableStateFlow<ViewState>(Initializing)
     val viewState: StateFlow<ViewState> = _viewState
+
+    fun onViewCreated() {
+        viewModelScope.launch(dispatchers.io()) {
+            _viewState.value = ViewState.LoadStartPage(autofillImportConfigStore.getConfig().launchUrlGooglePasswords)
+        }
+    }
 
     fun onPageStarted(url: String?) {
         Timber.i("onPageStarted: $url")
@@ -90,7 +102,7 @@ class ImportGooglePasswordsWebFlowViewModel @Inject constructor() : ViewModel() 
             val resultBundle = Bundle().also {
                 it.putParcelable(RESULT_KEY_DETAILS, ImportGooglePasswordResult.Error)
             }
-            _viewState.value = ViewState.UserFinishedImportFlow(resultBundle)
+            _viewState.value = ViewState.UserFinishedCannotImport(resultBundle)
         } else {
             terminateFlowAsCancellation(url ?: "unknown")
         }
@@ -113,10 +125,17 @@ class ImportGooglePasswordsWebFlowViewModel @Inject constructor() : ViewModel() 
         _viewState.value = ViewState.UserCancelledImportFlow(stage)
     }
 
+    fun firstPageLoading() {
+        _viewState.value = ViewState.WebContentShowing
+    }
+
     sealed interface ViewState {
         data object Initializing : ViewState
+        data object WebContentShowing : ViewState
+        data class LoadStartPage(val initialLaunchUrl: String) : ViewState
         data class UserCancelledImportFlow(val stage: String) : ViewState
         data class UserFinishedImportFlow(val bundle: Bundle) : ViewState
+        data class UserFinishedCannotImport(val bundle: Bundle) : ViewState
         data object NavigatingBack : ViewState
     }
 

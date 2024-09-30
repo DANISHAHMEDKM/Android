@@ -47,8 +47,8 @@ import com.duckduckgo.autofill.impl.databinding.FragmentAutofillManagementListMo
 import com.duckduckgo.autofill.impl.deviceauth.DeviceAuthenticator
 import com.duckduckgo.autofill.impl.deviceauth.DeviceAuthenticator.AuthConfiguration
 import com.duckduckgo.autofill.impl.deviceauth.DeviceAuthenticator.AuthResult.Success
-import com.duckduckgo.autofill.impl.pixel.AutofillPixelNames.AUTOFILL_IMPORT_PASSWORDS_CTA_BUTTON
-import com.duckduckgo.autofill.impl.pixel.AutofillPixelNames.AUTOFILL_IMPORT_PASSWORDS_OVERFLOW_MENU
+import com.duckduckgo.autofill.impl.pixel.AutofillPixelNames.AUTOFILL_SYNC_DESKTOP_PASSWORDS_CTA_BUTTON
+import com.duckduckgo.autofill.impl.pixel.AutofillPixelNames.AUTOFILL_SYNC_DESKTOP_PASSWORDS_OVERFLOW_MENU
 import com.duckduckgo.autofill.impl.ui.credential.management.AutofillManagementActivity
 import com.duckduckgo.autofill.impl.ui.credential.management.AutofillManagementRecyclerAdapter
 import com.duckduckgo.autofill.impl.ui.credential.management.AutofillManagementRecyclerAdapter.ContextMenuAction.CopyPassword
@@ -64,6 +64,7 @@ import com.duckduckgo.autofill.impl.ui.credential.management.AutofillSettingsVie
 import com.duckduckgo.autofill.impl.ui.credential.management.AutofillSettingsViewModel.ListModeCommand.ReevalutePromotions
 import com.duckduckgo.autofill.impl.ui.credential.management.AutofillSettingsViewModel.ListModeCommand.ShowUserReportSentMessage
 import com.duckduckgo.autofill.impl.ui.credential.management.importpassword.ImportPasswordActivityParams
+import com.duckduckgo.autofill.impl.ui.credential.management.importpassword.ImportPasswordsManagementViewState
 import com.duckduckgo.autofill.impl.ui.credential.management.sorting.CredentialGrouper
 import com.duckduckgo.autofill.impl.ui.credential.management.sorting.InitialExtractor
 import com.duckduckgo.autofill.impl.ui.credential.management.suggestion.SuggestionListBuilder
@@ -143,7 +144,8 @@ class AutofillManagementListMode : DuckDuckGoFragment(R.layout.fragment_autofill
     private var searchMenuItem: MenuItem? = null
     private var resetNeverSavedSitesMenuItem: MenuItem? = null
     private var deleteAllPasswordsMenuItem: MenuItem? = null
-    private var importPasswordsMenuItem: MenuItem? = null
+    private var syncDesktopPasswordsMenuItem: MenuItem? = null
+    private var importGooglePasswordsMenuItem: MenuItem? = null
 
     private val globalAutofillToggleListener = CompoundButton.OnCheckedChangeListener { _, isChecked ->
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@OnCheckedChangeListener
@@ -241,11 +243,39 @@ class AutofillManagementListMode : DuckDuckGoFragment(R.layout.fragment_autofill
     }
 
     private fun configureImportPasswordsButton() {
-        binding.emptyStateLayout.importPasswordsButton.setOnClickListener {
+        binding.emptyStateLayout.importPasswordsFromGoogleButton.setOnClickListener {
             viewModel.onImportPasswords()
-            pixel.fire(AUTOFILL_IMPORT_PASSWORDS_CTA_BUTTON)
         }
+
+        binding.emptyStateLayout.importPasswordsViaDesktopSyncButton.setOnClickListener {
+            launchImportPasswordsFromDesktopSyncScreen()
+            pixel.fire(AUTOFILL_SYNC_DESKTOP_PASSWORDS_CTA_BUTTON)
+        }
+
+        // setFragmentResultListener(SelectImportPasswordMethodDialog.RESULT_KEY) { _, result ->
+        //     when (val importResult = BundleCompat.getParcelable(result, SelectImportPasswordMethodDialog.RESULT_KEY_DETAILS, Result::class.java)) {
+        //         is UserChoseGcmImport -> {
+        //             when (importResult.importResult) {
+        //                 is Finished -> {
+        //                 }
+        //
+        //                 is InProgress -> {
+        //                 }
+        //             }
+        //         }
+        //
+        //         else -> {}
+        //     }
+        // }
     }
+
+    // private fun userImportedViaCsv(numberImported: Int) {
+    //     Snackbar.make(binding.root, getString(R.string.autofillImportCsvPasswordsSuccessMessage, numberImported), Snackbar.LENGTH_LONG).show()
+    // }
+    //
+    // private fun userImportViaGcm(numberImported: Int) {
+    //     Snackbar.make(binding.root, getString(R.string.autofillImportGooglePasswordsSuccessMessage, numberImported), Snackbar.LENGTH_LONG).show()
+    // }
 
     private fun configureToolbar() {
         activity?.addMenuProvider(
@@ -258,7 +288,8 @@ class AutofillManagementListMode : DuckDuckGoFragment(R.layout.fragment_autofill
                     searchMenuItem = menu.findItem(R.id.searchLogins)
                     resetNeverSavedSitesMenuItem = menu.findItem(R.id.resetNeverSavedSites)
                     deleteAllPasswordsMenuItem = menu.findItem(R.id.deleteAllPasswords)
-                    importPasswordsMenuItem = menu.findItem(R.id.importPasswords)
+                    syncDesktopPasswordsMenuItem = menu.findItem(R.id.syncDesktopPasswords)
+                    importGooglePasswordsMenuItem = menu.findItem(R.id.importGooglePasswords)
 
                     initializeSearchBar()
                 }
@@ -268,7 +299,8 @@ class AutofillManagementListMode : DuckDuckGoFragment(R.layout.fragment_autofill
                     searchMenuItem?.isVisible = loginsSaved
                     deleteAllPasswordsMenuItem?.isVisible = loginsSaved
                     resetNeverSavedSitesMenuItem?.isVisible = viewModel.neverSavedSitesViewState.value.showOptionToReset
-                    importPasswordsMenuItem?.isVisible = loginsSaved
+                    syncDesktopPasswordsMenuItem?.isVisible = loginsSaved
+                    importGooglePasswordsMenuItem?.isVisible = loginsSaved && viewModel.importPasswordsViewState.value.canImportFromGooglePasswords
                 }
 
                 override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
@@ -288,9 +320,14 @@ class AutofillManagementListMode : DuckDuckGoFragment(R.layout.fragment_autofill
                             true
                         }
 
-                        R.id.importPasswords -> {
+                        R.id.importGooglePasswords -> {
                             viewModel.onImportPasswords()
-                            pixel.fire(AUTOFILL_IMPORT_PASSWORDS_OVERFLOW_MENU)
+                            true
+                        }
+
+                        R.id.syncDesktopPasswords -> {
+                            launchImportPasswordsFromDesktopSyncScreen()
+                            pixel.fire(AUTOFILL_SYNC_DESKTOP_PASSWORDS_OVERFLOW_MENU)
                             true
                         }
 
@@ -364,7 +401,26 @@ class AutofillManagementListMode : DuckDuckGoFragment(R.layout.fragment_autofill
             }
         }
 
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.importPasswordsViewState.collect {
+                    // we can just invalidate the menu as [onPrepareMenu] will handle the new visibility for importing passwords menu item
+                    parentActivity()?.invalidateOptionsMenu()
+
+                    configureImportPasswordsButtonVisibility(it)
+                }
+            }
+        }
+
         viewModel.onViewCreated()
+    }
+
+    private fun configureImportPasswordsButtonVisibility(state: ImportPasswordsManagementViewState) {
+        if (state.canImportFromGooglePasswords) {
+            binding.emptyStateLayout.importPasswordsFromGoogleButton.show()
+        } else {
+            binding.emptyStateLayout.importPasswordsFromGoogleButton.gone()
+        }
     }
 
     private fun observeListModeViewModelCommands() {
@@ -395,6 +451,13 @@ class AutofillManagementListMode : DuckDuckGoFragment(R.layout.fragment_autofill
     }
 
     private fun launchImportPasswordsScreen() {
+        context?.let {
+            val dialog = SelectImportPasswordMethodDialog.instance()
+            dialog.show(parentFragmentManager, "SelectImportPasswordMethodDialog")
+        }
+    }
+
+    private fun launchImportPasswordsFromDesktopSyncScreen() {
         context?.let {
             globalActivityStarter.start(it, ImportPasswordActivityParams)
         }
@@ -602,7 +665,11 @@ class AutofillManagementListMode : DuckDuckGoFragment(R.layout.fragment_autofill
     }
 
     companion object {
-        fun instance(currentUrl: String? = null, privacyProtectionEnabled: Boolean?, source: AutofillSettingsLaunchSource? = null) =
+        fun instance(
+            currentUrl: String? = null,
+            privacyProtectionEnabled: Boolean?,
+            source: AutofillSettingsLaunchSource? = null,
+        ) =
             AutofillManagementListMode().apply {
                 arguments = Bundle().apply {
                     putString(ARG_CURRENT_URL, currentUrl)

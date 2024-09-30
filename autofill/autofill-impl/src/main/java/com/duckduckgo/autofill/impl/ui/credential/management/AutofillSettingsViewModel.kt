@@ -16,12 +16,17 @@
 
 package com.duckduckgo.autofill.impl.ui.credential.management
 
+import android.os.Parcelable
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.duckduckgo.anvil.annotations.ContributesViewModel
+import com.duckduckgo.app.browser.api.WebViewCapabilityChecker
+import com.duckduckgo.app.browser.api.WebViewCapabilityChecker.WebViewCapability.DocumentStartJavaScript
+import com.duckduckgo.app.browser.api.WebViewCapabilityChecker.WebViewCapability.WebMessageListener
 import com.duckduckgo.app.browser.favicon.FaviconManager
 import com.duckduckgo.app.statistics.pixels.Pixel
+import com.duckduckgo.autofill.api.AutofillFeature
 import com.duckduckgo.autofill.api.AutofillSettingsLaunchSource
 import com.duckduckgo.autofill.api.AutofillSettingsLaunchSource.BrowserOverflow
 import com.duckduckgo.autofill.api.AutofillSettingsLaunchSource.BrowserSnackbar
@@ -89,6 +94,7 @@ import com.duckduckgo.autofill.impl.ui.credential.management.AutofillSettingsVie
 import com.duckduckgo.autofill.impl.ui.credential.management.AutofillSettingsViewModel.ListModeCommand.LaunchResetNeverSaveListConfirmation
 import com.duckduckgo.autofill.impl.ui.credential.management.AutofillSettingsViewModel.ListModeCommand.PromptUserToAuthenticateMassDeletion
 import com.duckduckgo.autofill.impl.ui.credential.management.AutofillSettingsViewModel.ListModeCommand.ReevalutePromotions
+import com.duckduckgo.autofill.impl.ui.credential.management.importpassword.ImportPasswordsManagementViewState
 import com.duckduckgo.autofill.impl.ui.credential.management.neversaved.NeverSavedSitesViewState
 import com.duckduckgo.autofill.impl.ui.credential.management.searching.CredentialListFilter
 import com.duckduckgo.autofill.impl.ui.credential.management.viewing.duckaddress.DuckAddressIdentifier
@@ -112,6 +118,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
 @ContributesViewModel(ActivityScope::class)
@@ -133,6 +140,8 @@ class AutofillSettingsViewModel @Inject constructor(
     private val autofillBreakageReportSender: AutofillBreakageReportSender,
     private val autofillBreakageReportDataStore: AutofillSiteBreakageReportingDataStore,
     private val autofillBreakageReportCanShowRules: AutofillBreakageReportCanShowRules,
+    private val autofillFeature: AutofillFeature,
+    private val webViewCapabilityChecker: WebViewCapabilityChecker,
 ) : ViewModel() {
 
     private val _viewState = MutableStateFlow(ViewState())
@@ -140,6 +149,9 @@ class AutofillSettingsViewModel @Inject constructor(
 
     private val _neverSavedSitesViewState = MutableStateFlow(NeverSavedSitesViewState())
     val neverSavedSitesViewState: StateFlow<NeverSavedSitesViewState> = _neverSavedSitesViewState
+
+    private val _importPasswordsViewState = MutableStateFlow(ImportPasswordsManagementViewState())
+    val importPasswordsViewState: StateFlow<ImportPasswordsManagementViewState> = _importPasswordsViewState
 
     private val _commands = MutableStateFlow<List<Command>>(emptyList())
     val commands: StateFlow<List<Command>> = _commands
@@ -431,6 +443,14 @@ class AutofillSettingsViewModel @Inject constructor(
                 _neverSavedSitesViewState.value = NeverSavedSitesViewState(showOptionToReset = count > 0)
             }
         }
+
+        viewModelScope.launch(dispatchers.io()) {
+            val gpmImport = autofillFeature.self().isEnabled() && autofillFeature.canImportFromGooglePasswordManager().isEnabled()
+            val webViewWebMessageSupport = webViewCapabilityChecker.isSupported(WebMessageListener)
+            val webViewDocumentStartJavascript = webViewCapabilityChecker.isSupported(DocumentStartJavaScript)
+            val canImport = gpmImport && webViewWebMessageSupport && webViewDocumentStartJavascript
+            _importPasswordsViewState.value = ImportPasswordsManagementViewState(canImport)
+        }
     }
 
     private suspend fun isBreakageReportingAllowed(): Boolean {
@@ -690,7 +710,9 @@ class AutofillSettingsViewModel @Inject constructor(
     }
 
     fun onImportPasswords() {
-        addCommand(LaunchImportPasswords)
+        viewModelScope.launch(dispatchers.io()) {
+            addCommand(LaunchImportPasswords)
+        }
     }
 
     fun onReportBreakageClicked() {
@@ -702,7 +724,10 @@ class AutofillSettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateCurrentSite(currentUrl: String?, privacyProtectionEnabled: Boolean?) {
+    fun updateCurrentSite(
+        currentUrl: String?,
+        privacyProtectionEnabled: Boolean?,
+    ) {
         val updatedReportBreakageState = _viewState.value.reportBreakageState.copy(
             currentUrl = currentUrl,
             privacyProtectionEnabled = privacyProtectionEnabled,
@@ -855,10 +880,16 @@ class AutofillSettingsViewModel @Inject constructor(
         data class LaunchDeleteAllPasswordsConfirmation(val numberToDelete: Int) : ListModeCommand()
         data class PromptUserToAuthenticateMassDeletion(val authConfiguration: AuthConfiguration) : ListModeCommand()
         data object LaunchImportPasswords : ListModeCommand()
+
         data class LaunchReportAutofillBreakageConfirmation(val eTldPlusOne: String) : ListModeCommand()
         data object ShowUserReportSentMessage : ListModeCommand()
         data object ReevalutePromotions : ListModeCommand()
     }
+
+    @Parcelize
+    data class ImportPasswordConfig(
+        val canImportFromGooglePasswordManager: Boolean,
+    ) : Parcelable
 
     sealed class DuckAddressStatus {
         object NotADuckAddress : DuckAddressStatus()
