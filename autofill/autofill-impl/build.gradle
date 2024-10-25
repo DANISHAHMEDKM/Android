@@ -68,7 +68,7 @@ dependencies {
     implementation AndroidX.room.ktx
     implementation AndroidX.biometric
 
-    implementation "net.zetetic:android-database-sqlcipher:_"
+    implementation "net.zetetic:sqlcipher-android:_"
 
     // Testing dependencies
     testImplementation "org.mockito.kotlin:mockito-kotlin:_"
