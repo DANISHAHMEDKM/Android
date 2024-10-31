@@ -87,8 +87,8 @@ class CtaViewModel @Inject constructor(
                 }
             }
 
-    private val requiredDaxOnboardingCtas: Array<CtaId> by lazy {
-        if (extendedOnboardingFeatureToggles.privacyProCta().isEnabled()) {
+    private suspend fun requiredDaxOnboardingCtas(): Array<CtaId> {
+        return if (extendedOnboardingFeatureToggles.privacyProCta().isEnabled()) { // TODO NOELIA add subscriptions.isEligible()
             arrayOf(
                 CtaId.DAX_INTRO,
                 CtaId.DAX_DIALOG_SERP,
@@ -238,8 +238,12 @@ class CtaViewModel @Inject constructor(
                 }
             }
 
-            canShowPrivacyProCta() && extendedOnboardingFeatureToggles.privacyProCta().isEnabled() -> {
-                DaxBubbleCta.DaxPrivacyProCta(onboardingStore, appInstallStore)
+            canShowPrivacyProCta() && extendedOnboardingFeatureToggles.privacyProCta().isEnabled() -> { // TODO NOELIA add subscriptions.isEligible()
+                if (highlightsOnboardingExperimentManager.isHighlightsEnabled()) {
+                    DaxBubbleCta.DaxExperimentPrivacyProCta(onboardingStore, appInstallStore)
+                } else {
+                    DaxBubbleCta.DaxPrivacyProCta(onboardingStore, appInstallStore)
+                }
             }
 
             canShowWidgetCta() -> {
@@ -422,7 +426,7 @@ class CtaViewModel @Inject constructor(
 
     private suspend fun allOnboardingCtasShown(): Boolean {
         return withContext(dispatchers.io()) {
-            requiredDaxOnboardingCtas.all {
+            requiredDaxOnboardingCtas().all {
                 dismissedCtaDao.exists(it)
             }
         }
