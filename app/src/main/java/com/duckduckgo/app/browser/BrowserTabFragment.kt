@@ -77,6 +77,7 @@ import androidx.core.net.toUri
 import androidx.core.text.HtmlCompat
 import androidx.core.text.HtmlCompat.FROM_HTML_MODE_LEGACY
 import androidx.core.text.toSpannable
+import androidx.core.view.isVisible
 import androidx.core.view.postDelayed
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.Fragment
@@ -110,6 +111,7 @@ import com.duckduckgo.app.browser.api.WebViewCapabilityChecker.WebViewCapability
 import com.duckduckgo.app.browser.applinks.AppLinksLauncher
 import com.duckduckgo.app.browser.applinks.AppLinksSnackBarConfigurator
 import com.duckduckgo.app.browser.autocomplete.BrowserAutoCompleteSuggestionsAdapter
+import com.duckduckgo.app.browser.autocomplete.SuggestionItemDecoration
 import com.duckduckgo.app.browser.commands.Command
 import com.duckduckgo.app.browser.commands.Command.ShowBackNavigationHistory
 import com.duckduckgo.app.browser.commands.NavigationCommand
@@ -596,6 +598,12 @@ class BrowserTabFragment :
     private val daxDialogOnboardingCta
         get() = binding.includeOnboardingDaxDialog
 
+    private val daxDialogIntroBubbleCtaExperiment
+        get() = binding.includeNewBrowserTab.includeDaxDialogIntroBubbleCtaExperiment
+
+    private val daxDialogOnboardingCtaExperiment
+        get() = binding.includeOnboardingDaxDialogExperiment
+
     // Optimization to prevent against excessive work generating WebView previews; an existing job will be cancelled if a new one is launched
     private var bitmapGeneratorJob: Job? = null
 
@@ -819,7 +827,7 @@ class BrowserTabFragment :
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
-        omnibar = Omnibar(settingsDataStore.omnibarPosition, changeOmnibarPositionFeature, binding)
+        omnibar = Omnibar(settingsDataStore.omnibarPosition, changeOmnibarPositionFeature.refactor().isEnabled(), binding)
 
         webViewContainer = binding.webViewContainer
         configureObservers()
@@ -1371,9 +1379,9 @@ class BrowserTabFragment :
         webView?.hide()
         errorView.errorMessage.text = getString(errorType.errorId, url).html(requireContext())
         if (appTheme.isLightModeEnabled()) {
-            errorView.yetiIcon?.setImageResource(com.duckduckgo.mobile.android.R.drawable.ic_yeti_light)
+            errorView.yetiIcon.setImageResource(com.duckduckgo.mobile.android.R.drawable.ic_yeti_light)
         } else {
-            errorView.yetiIcon?.setImageResource(com.duckduckgo.mobile.android.R.drawable.ic_yeti_dark)
+            errorView.yetiIcon.setImageResource(com.duckduckgo.mobile.android.R.drawable.ic_yeti_dark)
         }
         errorView.errorLayout.show()
     }
@@ -1741,10 +1749,33 @@ class BrowserTabFragment :
                 contentScopeScripts.sendSubscriptionEvent(it.cssData)
                 duckPlayerScripts.sendSubscriptionEvent(it.duckPlayerData)
             }
+            is Command.SetBrowserBackground -> setBrowserBackgroundRes(it.backgroundRes)
+            is Command.SetOnboardingDialogBackground -> setOnboardingDialogBackgroundRes(it.backgroundRes)
+            is Command.LaunchFireDialogFromOnboardingDialog -> {
+                hideOnboardingDaxDialog(it.onboardingCta)
+                browserActivity?.launchFire()
+            }
+            is Command.SwitchToTab -> {
+                binding.focusedView.gone()
+                if (binding.autoCompleteSuggestionsList.isVisible) {
+                    viewModel.autoCompleteSuggestionsGone()
+                }
+                binding.autoCompleteSuggestionsList.gone()
+                browserActivity?.openExistingTab(it.tabId)
+            }
             else -> {
                 // NO OP
             }
         }
+    }
+
+    private fun setBrowserBackgroundRes(backgroundRes: Int) {
+        newBrowserTab.browserBackground.setImageResource(backgroundRes)
+    }
+
+    private fun setOnboardingDialogBackgroundRes(backgroundRes: Int) {
+        daxDialogOnboardingCta.onboardingDaxDialogBackground.setImageResource(backgroundRes)
+        daxDialogOnboardingCtaExperiment.onboardingDaxDialogBackground.setImageResource(backgroundRes)
     }
 
     private fun showRemoveSearchSuggestionDialog(suggestion: AutoCompleteSuggestion) {
@@ -2388,6 +2419,9 @@ class BrowserTabFragment :
             omnibarPosition = settingsDataStore.omnibarPosition,
         )
         binding.autoCompleteSuggestionsList.adapter = autoCompleteSuggestionsAdapter
+        binding.autoCompleteSuggestionsList.addItemDecoration(
+            SuggestionItemDecoration(ContextCompat.getDrawable(context, R.drawable.suggestions_divider)!!),
+        )
     }
 
     private fun configureNewTab() {
@@ -2627,7 +2661,7 @@ class BrowserTabFragment :
                         id: String?,
                         data: JSONObject?,
                     ) {
-                        viewModel.processJsCallbackMessage(featureName, method, id, data) {
+                        viewModel.processJsCallbackMessage(featureName, method, id, data, isActiveCustomTab()) {
                             it.url
                         }
                     }
@@ -2642,7 +2676,7 @@ class BrowserTabFragment :
                         id: String?,
                         data: JSONObject?,
                     ) {
-                        viewModel.processJsCallbackMessage(featureName, method, id, data) {
+                        viewModel.processJsCallbackMessage(featureName, method, id, data, isActiveCustomTab()) {
                             it.url
                         }
                     }
@@ -2679,8 +2713,9 @@ class BrowserTabFragment :
     }
 
     private fun hideDaxBubbleCta() {
-        newBrowserTab.browserBackground.setBackgroundResource(0)
+        newBrowserTab.browserBackground.setImageResource(0)
         daxDialogIntroBubbleCta.root.gone()
+        daxDialogIntroBubbleCtaExperiment.root.gone()
     }
 
     private fun configureWebViewForBlobDownload(webView: DuckDuckGoWebView) {
@@ -3037,9 +3072,11 @@ class BrowserTabFragment :
     private fun savedSiteAdded(savedSiteChangedViewState: SavedSiteChangedViewState) {
         val dismissHandler = Handler(Looper.getMainLooper())
         val dismissRunnable = Runnable {
-            bookmarksBottomSheetDialog?.dialog?.let { dialog ->
-                if (dialog.isShowing) {
-                    dialog.dismiss()
+            if (isAdded) {
+                bookmarksBottomSheetDialog?.dialog?.let { dialog ->
+                    if (dialog.isShowing) {
+                        dialog.dismiss()
+                    }
                 }
             }
         }
@@ -3707,7 +3744,9 @@ class BrowserTabFragment :
                 if (viewState.showSuggestions || viewState.showFavorites) {
                     if (viewState.favorites.isNotEmpty() && viewState.showFavorites) {
                         showFocusedView()
-                        viewModel.autoCompleteSuggestionsGone()
+                        if (binding.autoCompleteSuggestionsList.isVisible) {
+                            viewModel.autoCompleteSuggestionsGone()
+                        }
                         binding.autoCompleteSuggestionsList.gone()
                     } else {
                         binding.autoCompleteSuggestionsList.show()
@@ -3715,7 +3754,9 @@ class BrowserTabFragment :
                         hideFocusedView()
                     }
                 } else {
-                    viewModel.autoCompleteSuggestionsGone()
+                    if (binding.autoCompleteSuggestionsList.isVisible) {
+                        viewModel.autoCompleteSuggestionsGone()
+                    }
                     binding.autoCompleteSuggestionsList.gone()
                     hideFocusedView()
                 }
@@ -3953,6 +3994,9 @@ class BrowserTabFragment :
         private fun showCta(configuration: Cta) {
             when (configuration) {
                 is HomePanelCta -> showHomeCta(configuration)
+                is DaxBubbleCta.DaxExperimentIntroSearchOptionsCta, is DaxBubbleCta.DaxExperimentIntroVisitSiteOptionsCta,
+                is DaxBubbleCta.DaxExperimentEndCta,
+                -> showDaxExperimentOnboardingBubbleCta(configuration as DaxBubbleCta)
                 is DaxBubbleCta -> showDaxOnboardingBubbleCta(configuration)
                 is OnboardingDaxDialogCta -> showOnboardingDialogCta(configuration)
             }
@@ -3971,47 +4015,59 @@ class BrowserTabFragment :
                     viewModel.onUserClickCtaSecondaryButton(configuration)
                 }
             }
-            newBrowserTab.newTabLayout.setOnClickListener { daxDialogIntroBubbleCta.dialogTextCta.finishAnimation() }
+            viewModel.setBrowserExperimentBackground(appTheme.isLightModeEnabled())
+            viewModel.onCtaShown()
+        }
 
-            if (appTheme.isLightModeEnabled()) {
-                newBrowserTab.browserBackground.setBackgroundResource(R.drawable.onboarding_experiment_background_bitmap_light)
-            } else {
-                newBrowserTab.browserBackground.setBackgroundResource(R.drawable.onboarding_experiment_background_bitmap_dark)
+        private fun showDaxExperimentOnboardingBubbleCta(configuration: DaxBubbleCta) {
+            hideNewTab()
+            configuration.apply {
+                showCta(daxDialogIntroBubbleCtaExperiment.daxCtaContainer) {
+                    setOnOptionClicked { userEnteredQuery(it.link) }
+                }
+                setOnPrimaryCtaClicked {
+                    viewModel.onUserClickCtaOkButton(configuration)
+                }
+                setOnSecondaryCtaClicked {
+                    viewModel.onUserClickCtaSecondaryButton(configuration)
+                }
             }
-
+            viewModel.setBrowserExperimentBackground(appTheme.isLightModeEnabled())
             viewModel.onCtaShown()
         }
 
         @SuppressLint("ClickableViewAccessibility")
         private fun showOnboardingDialogCta(configuration: OnboardingDaxDialogCta) {
             hideNewTab()
-            val onTypingAnimationFinished = if (configuration is OnboardingDaxDialogCta.DaxTrackersBlockedCta) {
+            val onTypingAnimationFinished = if (configuration is OnboardingDaxDialogCta.DaxTrackersBlockedCta ||
+                configuration is OnboardingDaxDialogCta.DaxExperimentTrackersBlockedCta
+            ) {
                 { viewModel.onOnboardingDaxTypingAnimationFinished() }
             } else {
                 {}
             }
-            configuration.showOnboardingCta(binding, { viewModel.onUserClickCtaOkButton(configuration) }, onTypingAnimationFinished)
+            configuration.showOnboardingCta(
+                binding,
+                { viewModel.onUserClickCtaOkButton(configuration) },
+                { viewModel.onUserClickCtaSecondaryButton(configuration) },
+                onTypingAnimationFinished,
+            )
             if (configuration is OnboardingDaxDialogCta.DaxSiteSuggestionsCta) {
                 configuration.setOnOptionClicked(
                     daxDialogOnboardingCta,
                 ) {
                     userEnteredQuery(it.link)
-                    viewModel.onUserClickCtaOkButton(configuration)
                 }
             }
-            if (appTheme.isLightModeEnabled()) {
-                binding.includeOnboardingDaxDialog.onboardingDaxDialogBackground
-                    .setBackgroundResource(R.drawable.onboarding_experiment_background_bitmap_light)
-            } else {
-                binding.includeOnboardingDaxDialog.onboardingDaxDialogBackground
-                    .setBackgroundResource(R.drawable.onboarding_experiment_background_bitmap_dark)
+            if (configuration is OnboardingDaxDialogCta.DaxExperimentSiteSuggestionsCta) {
+                configuration.setOnOptionClicked(
+                    daxDialogOnboardingCtaExperiment,
+                ) {
+                    userEnteredQuery(it.link)
+                }
             }
-            binding.webViewContainer.setOnClickListener { daxDialogIntroBubbleCta.dialogTextCta.finishAnimation() }
+            viewModel.setOnboardingDialogExperimentBackground(appTheme.isLightModeEnabled())
             viewModel.onCtaShown()
-        }
-
-        private fun removeNewTabLayoutClickListener() {
-            newBrowserTab.newTabLayout.setOnClickListener(null)
         }
 
         private fun showHomeCta(
@@ -4083,6 +4139,8 @@ class BrowserTabFragment :
         private fun hideDaxCta() {
             daxDialogOnboardingCta.dialogTextCta.cancelAnimation()
             daxDialogOnboardingCta.daxCtaContainer.gone()
+            daxDialogOnboardingCtaExperiment.dialogTextCta.cancelAnimation()
+            daxDialogOnboardingCtaExperiment.daxCtaContainer.gone()
         }
 
         fun renderHomeCta() {
@@ -4099,12 +4157,14 @@ class BrowserTabFragment :
         }
 
         private fun goFullScreen() {
+            omnibar.hide()
             binding.webViewFullScreenContainer.show()
             activity?.toggleFullScreen()
             showToast(R.string.fullScreenMessage, Toast.LENGTH_SHORT)
         }
 
         private fun exitFullScreen() {
+            omnibar.show()
             binding.webViewFullScreenContainer.removeAllViews()
             binding.webViewFullScreenContainer.gone()
             activity?.toggleFullScreen()

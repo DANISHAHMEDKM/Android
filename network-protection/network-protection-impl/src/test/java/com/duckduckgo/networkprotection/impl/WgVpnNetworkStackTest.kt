@@ -16,6 +16,7 @@
 
 package com.duckduckgo.networkprotection.impl
 
+import android.annotation.SuppressLint
 import com.duckduckgo.data.store.api.FakeSharedPreferencesProvider
 import com.duckduckgo.feature.toggles.api.Toggle
 import com.duckduckgo.mobile.android.vpn.network.FakeDnsProvider
@@ -146,6 +147,7 @@ class WgVpnNetworkStackTest {
         verify(netpPixels).reportEnableAttempt()
     }
 
+    @SuppressLint("DenyListedApi")
     @Test
     fun whenBlockMalwareIsConfigureDNSIsConputed() = runTest {
         whenever(wgTunnel.createAndSetWgConfig()).thenReturn(wgConfig.success())
@@ -230,7 +232,7 @@ class WgVpnNetworkStackTest {
     }
 
     @Test
-    fun whenOnStopVpnWithSelfStopThenResetEnabledTimeInMillisAndServerDetails() = runTest {
+    fun whenOnStopVpnWithSelfPauseThenResetEnabledTimeInMillisAndServerDetails() = runTest {
         assertEquals(
             Result.success(Unit),
             wgVpnNetworkStack.onStopVpn(SELF_STOP()),
@@ -242,7 +244,7 @@ class WgVpnNetworkStackTest {
     }
 
     @Test
-    fun whenOnStopVpnWithRestartThenResetEnabledTimeInMillisAndServerDetails() = runTest {
+    fun whenOnPauseVpnWithRestartThenResetEnabledTimeInMillisAndServerDetails() = runTest {
         assertEquals(
             Result.success(Unit),
             wgVpnNetworkStack.onStopVpn(RESTART),

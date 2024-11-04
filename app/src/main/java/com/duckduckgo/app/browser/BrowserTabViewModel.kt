@@ -52,12 +52,13 @@ import com.duckduckgo.app.accessibility.data.AccessibilitySettingsDataStore
 import com.duckduckgo.app.autocomplete.api.AutoComplete
 import com.duckduckgo.app.autocomplete.api.AutoComplete.AutoCompleteResult
 import com.duckduckgo.app.autocomplete.api.AutoComplete.AutoCompleteSuggestion
-import com.duckduckgo.app.autocomplete.api.AutoComplete.AutoCompleteSuggestion.AutoCompleteBookmarkSuggestion
 import com.duckduckgo.app.autocomplete.api.AutoComplete.AutoCompleteSuggestion.AutoCompleteDefaultSuggestion
 import com.duckduckgo.app.autocomplete.api.AutoComplete.AutoCompleteSuggestion.AutoCompleteHistoryRelatedSuggestion.AutoCompleteHistorySearchSuggestion
 import com.duckduckgo.app.autocomplete.api.AutoComplete.AutoCompleteSuggestion.AutoCompleteHistoryRelatedSuggestion.AutoCompleteHistorySuggestion
 import com.duckduckgo.app.autocomplete.api.AutoComplete.AutoCompleteSuggestion.AutoCompleteHistoryRelatedSuggestion.AutoCompleteInAppMessageSuggestion
 import com.duckduckgo.app.autocomplete.api.AutoComplete.AutoCompleteSuggestion.AutoCompleteSearchSuggestion
+import com.duckduckgo.app.autocomplete.api.AutoComplete.AutoCompleteSuggestion.AutoCompleteUrlSuggestion.AutoCompleteBookmarkSuggestion
+import com.duckduckgo.app.autocomplete.api.AutoComplete.AutoCompleteSuggestion.AutoCompleteUrlSuggestion.AutoCompleteSwitchToTabSuggestion
 import com.duckduckgo.app.browser.LongPressHandler.RequiredAction
 import com.duckduckgo.app.browser.SSLErrorType.EXPIRED
 import com.duckduckgo.app.browser.SSLErrorType.GENERIC
@@ -107,6 +108,7 @@ import com.duckduckgo.app.browser.commands.Command.HideWebContent
 import com.duckduckgo.app.browser.commands.Command.InjectEmailAddress
 import com.duckduckgo.app.browser.commands.Command.LaunchAddWidget
 import com.duckduckgo.app.browser.commands.Command.LaunchAutofillSettings
+import com.duckduckgo.app.browser.commands.Command.LaunchFireDialogFromOnboardingDialog
 import com.duckduckgo.app.browser.commands.Command.LaunchNewTab
 import com.duckduckgo.app.browser.commands.Command.LaunchPrivacyPro
 import com.duckduckgo.app.browser.commands.Command.LaunchTabSwitcher
@@ -127,6 +129,8 @@ import com.duckduckgo.app.browser.commands.Command.ScreenUnlock
 import com.duckduckgo.app.browser.commands.Command.SendEmail
 import com.duckduckgo.app.browser.commands.Command.SendResponseToJs
 import com.duckduckgo.app.browser.commands.Command.SendSms
+import com.duckduckgo.app.browser.commands.Command.SetBrowserBackground
+import com.duckduckgo.app.browser.commands.Command.SetOnboardingDialogBackground
 import com.duckduckgo.app.browser.commands.Command.ShareLink
 import com.duckduckgo.app.browser.commands.Command.ShowAppLinkPrompt
 import com.duckduckgo.app.browser.commands.Command.ShowBackNavigationHistory
@@ -218,6 +222,7 @@ import com.duckduckgo.app.global.model.domainMatchesUrl
 import com.duckduckgo.app.location.GeoLocationPermissions
 import com.duckduckgo.app.location.data.LocationPermissionType
 import com.duckduckgo.app.location.data.LocationPermissionsRepository
+import com.duckduckgo.app.onboarding.ui.page.extendedonboarding.HighlightsOnboardingExperimentManager
 import com.duckduckgo.app.pixels.AppPixelName
 import com.duckduckgo.app.pixels.AppPixelName.AUTOCOMPLETE_BANNER_DISMISSED
 import com.duckduckgo.app.pixels.AppPixelName.AUTOCOMPLETE_BANNER_SHOWN
@@ -227,6 +232,7 @@ import com.duckduckgo.app.pixels.AppPixelName.AUTOCOMPLETE_RESULT_DELETED
 import com.duckduckgo.app.pixels.AppPixelName.AUTOCOMPLETE_RESULT_DELETED_DAILY
 import com.duckduckgo.app.pixels.AppPixelName.AUTOCOMPLETE_SEARCH_PHRASE_SELECTION
 import com.duckduckgo.app.pixels.AppPixelName.AUTOCOMPLETE_SEARCH_WEBSITE_SELECTION
+import com.duckduckgo.app.pixels.AppPixelName.ONBOARDING_DAX_CTA_CANCEL_BUTTON
 import com.duckduckgo.app.pixels.AppPixelName.ONBOARDING_SEARCH_CUSTOM
 import com.duckduckgo.app.pixels.AppPixelName.ONBOARDING_VISIT_SITE_CUSTOM
 import com.duckduckgo.app.pixels.remoteconfig.AndroidBrowserConfigFeature
@@ -239,6 +245,7 @@ import com.duckduckgo.app.statistics.pixels.Pixel.PixelParameter
 import com.duckduckgo.app.statistics.pixels.Pixel.PixelType.Count
 import com.duckduckgo.app.statistics.pixels.Pixel.PixelType.Daily
 import com.duckduckgo.app.statistics.pixels.Pixel.PixelType.Unique
+import com.duckduckgo.app.statistics.pixels.Pixel.PixelValues.DAX_FIRE_DIALOG_CTA
 import com.duckduckgo.app.surrogates.SurrogateResponse
 import com.duckduckgo.app.tabs.model.TabEntity
 import com.duckduckgo.app.tabs.model.TabRepository
@@ -253,12 +260,14 @@ import com.duckduckgo.browser.api.UserBrowserProperties
 import com.duckduckgo.browser.api.brokensite.BrokenSiteData
 import com.duckduckgo.browser.api.brokensite.BrokenSiteData.ReportFlow.MENU
 import com.duckduckgo.common.utils.AppUrl
+import com.duckduckgo.common.utils.ConflatedJob
 import com.duckduckgo.common.utils.DispatcherProvider
 import com.duckduckgo.common.utils.SingleLiveEvent
 import com.duckduckgo.common.utils.baseHost
 import com.duckduckgo.common.utils.device.DeviceInfo
 import com.duckduckgo.common.utils.extensions.asLocationPermissionOrigin
 import com.duckduckgo.common.utils.isMobileSite
+import com.duckduckgo.common.utils.plugins.PluginPoint
 import com.duckduckgo.common.utils.toDesktopUri
 import com.duckduckgo.di.scopes.FragmentScope
 import com.duckduckgo.downloads.api.DownloadCommand
@@ -276,6 +285,8 @@ import com.duckduckgo.privacy.config.api.AmpLinks
 import com.duckduckgo.privacy.config.api.ContentBlocking
 import com.duckduckgo.privacy.config.api.Gpc
 import com.duckduckgo.privacy.config.api.TrackingParameters
+import com.duckduckgo.privacy.dashboard.api.PrivacyProtectionTogglePlugin
+import com.duckduckgo.privacy.dashboard.api.PrivacyToggleOrigin
 import com.duckduckgo.privacy.dashboard.impl.pixels.PrivacyDashboardPixels
 import com.duckduckgo.privacyprotectionspopup.api.PrivacyProtectionsPopupExperimentExternalPixels
 import com.duckduckgo.privacyprotectionspopup.api.PrivacyProtectionsPopupManager
@@ -296,15 +307,11 @@ import com.duckduckgo.subscriptions.api.Subscriptions
 import com.duckduckgo.sync.api.favicons.FaviconsFetchingPrompt
 import com.duckduckgo.voice.api.VoiceSearchAvailability
 import com.duckduckgo.voice.api.VoiceSearchAvailabilityPixelLogger
-import com.jakewharton.rxrelay2.PublishRelay
 import dagger.Lazy
-import io.reactivex.android.schedulers.AndroidSchedulers
-import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 import java.net.URI
 import java.net.URISyntaxException
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import kotlin.collections.List
@@ -342,9 +349,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -420,6 +430,8 @@ class BrowserTabViewModel @Inject constructor(
     private val loadingBarExperimentManager: LoadingBarExperimentManager,
     private val refreshPixelSender: RefreshPixelSender,
     private val changeOmnibarPositionFeature: ChangeOmnibarPositionFeature,
+    private val highlightsOnboardingExperimentManager: HighlightsOnboardingExperimentManager,
+    private val privacyProtectionTogglePlugin: PluginPoint<PrivacyProtectionTogglePlugin>,
 ) : WebViewClientListener,
     EditSavedSiteListener,
     DeleteBookmarkListener,
@@ -430,8 +442,6 @@ class BrowserTabViewModel @Inject constructor(
     private var buildingSiteFactoryJob: Job? = null
     private var hasUserSeenHistoryIAM = false
     private var lastAutoCompleteState: AutoCompleteViewState? = null
-
-    private val replyProxyMap = mutableMapOf<String, JavaScriptReplyProxy>()
 
     // Map<String, Map<String, JavaScriptReplyProxy>>() = Map<Origin, Map<location.href, JavaScriptReplyProxy>>()
     private val fixedReplyProxyMap = mutableMapOf<String, Map<String, JavaScriptReplyProxy>>()
@@ -491,7 +501,7 @@ class BrowserTabViewModel @Inject constructor(
     private val locationPermissionSession: MutableMap<String, LocationPermissionType> = mutableMapOf()
 
     @VisibleForTesting
-    val autoCompletePublishSubject = PublishRelay.create<String>()
+    internal val autoCompleteStateFlow = MutableStateFlow("")
     private val fireproofWebsiteState: LiveData<List<FireproofWebsiteEntity>> = fireproofWebsiteRepository.getFireproofWebsites()
 
     @ExperimentalCoroutinesApi
@@ -500,7 +510,7 @@ class BrowserTabViewModel @Inject constructor(
         context = viewModelScope.coroutineContext,
     )
 
-    private var autoCompleteDisposable: Disposable? = null
+    private var autoCompleteJob = ConflatedJob()
     private var site: Site? = null
     private lateinit var tabId: String
     private var webNavigationState: WebNavigationState? = null
@@ -581,7 +591,6 @@ class BrowserTabViewModel @Inject constructor(
 
     init {
         initializeViewStates()
-        configureAutoComplete()
         logVoiceSearchAvailability()
 
         fireproofWebsiteState.observeForever(fireproofWebsitesObserver)
@@ -744,22 +753,23 @@ class BrowserTabViewModel @Inject constructor(
         if (voiceSearchAvailability.isVoiceSearchSupported) voiceSearchPixelLogger.log()
     }
 
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     @SuppressLint("CheckResult")
     private fun configureAutoComplete() {
-        autoCompleteDisposable = autoCompletePublishSubject
-            .debounce(300, TimeUnit.MILLISECONDS)
-            .switchMap { autoComplete.autoComplete(it) }
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe(
-                { result ->
-                    if (result.suggestions.contains(AutoCompleteInAppMessageSuggestion)) {
-                        hasUserSeenHistoryIAM = true
-                    }
-                    onAutoCompleteResultReceived(result)
-                },
-                { t: Throwable? -> Timber.w(t, "Failed to get search results") },
-            )
+        autoCompleteJob += autoCompleteStateFlow
+            .debounce(300)
+            .distinctUntilChanged()
+            .flatMapLatest { autoComplete.autoComplete(it) }
+            .flowOn(dispatchers.io())
+            .onEach { result ->
+                if (result.suggestions.contains(AutoCompleteInAppMessageSuggestion)) {
+                    hasUserSeenHistoryIAM = true
+                }
+                onAutoCompleteResultReceived(result)
+            }
+            .flowOn(dispatchers.main())
+            .catch { t: Throwable? -> Timber.w(t, "Failed to get search results") }
+            .launchIn(viewModelScope)
     }
 
     private fun onAutoCompleteResultReceived(result: AutoCompleteResult) {
@@ -773,8 +783,7 @@ class BrowserTabViewModel @Inject constructor(
     @VisibleForTesting
     public override fun onCleared() {
         buildingSiteFactoryJob?.cancel()
-        autoCompleteDisposable?.dispose()
-        autoCompleteDisposable = null
+        autoCompleteJob.cancel()
         fireproofWebsiteState.removeObserver(fireproofWebsitesObserver)
         navigationAwareLoginDetector.loginEventLiveData.removeObserver(loginDetectionObserver)
         fireproofDialogsEventHandler.event.removeObserver(fireproofDialogEventObserver)
@@ -842,10 +851,14 @@ class BrowserTabViewModel @Inject constructor(
         val hasHistory = withContext(dispatchers.io()) {
             history.hasHistory()
         }
+        val hasTabs = withContext(dispatchers.io()) {
+            (tabRepository.liveTabs.value?.size ?: 0) > 1
+        }
         val hasBookmarkResults = currentViewState.searchResults.suggestions.any { it is AutoCompleteBookmarkSuggestion && !it.isFavorite }
         val hasFavoriteResults = currentViewState.searchResults.suggestions.any { it is AutoCompleteBookmarkSuggestion && it.isFavorite }
         val hasHistoryResults =
             currentViewState.searchResults.suggestions.any { it is AutoCompleteHistorySuggestion || it is AutoCompleteHistorySearchSuggestion }
+        val hasSwitchToTabResults = currentViewState.searchResults.suggestions.any { it is AutoCompleteSwitchToTabSuggestion }
         val params = mapOf(
             PixelParameter.SHOWED_BOOKMARKS to hasBookmarkResults.toString(),
             PixelParameter.SHOWED_FAVORITES to hasFavoriteResults.toString(),
@@ -853,6 +866,8 @@ class BrowserTabViewModel @Inject constructor(
             PixelParameter.FAVORITE_CAPABLE to hasFavorites.toString(),
             PixelParameter.HISTORY_CAPABLE to hasHistory.toString(),
             PixelParameter.SHOWED_HISTORY to hasHistoryResults.toString(),
+            PixelParameter.SWITCH_TO_TAB_CAPABLE to hasTabs.toString(),
+            PixelParameter.SHOWED_SWITCH_TO_TAB to hasSwitchToTabResults.toString(),
         )
         val pixelName = when (suggestion) {
             is AutoCompleteBookmarkSuggestion -> {
@@ -866,6 +881,7 @@ class BrowserTabViewModel @Inject constructor(
             is AutoCompleteSearchSuggestion -> if (suggestion.isUrl) AUTOCOMPLETE_SEARCH_WEBSITE_SELECTION else AUTOCOMPLETE_SEARCH_PHRASE_SELECTION
             is AutoCompleteHistorySuggestion -> AUTOCOMPLETE_HISTORY_SITE_SELECTION
             is AutoCompleteHistorySearchSuggestion -> AUTOCOMPLETE_HISTORY_SEARCH_SELECTION
+            is AutoCompleteSwitchToTabSuggestion -> AppPixelName.AUTOCOMPLETE_SWITCH_TO_TAB_SELECTION
             else -> return
         }
 
@@ -883,6 +899,7 @@ class BrowserTabViewModel @Inject constructor(
                     is AutoCompleteSearchSuggestion -> onUserSubmittedQuery(suggestion.phrase, FromAutocomplete(isNav = suggestion.isUrl))
                     is AutoCompleteHistorySuggestion -> onUserSubmittedQuery(suggestion.url, FromAutocomplete(isNav = true))
                     is AutoCompleteHistorySearchSuggestion -> onUserSubmittedQuery(suggestion.phrase, FromAutocomplete(isNav = false))
+                    is AutoCompleteSwitchToTabSuggestion -> onUserSwitchedToTab(suggestion.tabId)
                     is AutoCompleteInAppMessageSuggestion -> return@withContext
                 }
             }
@@ -906,6 +923,8 @@ class BrowserTabViewModel @Inject constructor(
         suggestion: AutoCompleteSuggestion,
         omnibarText: String,
     ) {
+        configureAutoComplete()
+
         appCoroutineScope.launch(dispatchers.io()) {
             pixel.fire(AUTOCOMPLETE_RESULT_DELETED)
             pixel.fire(AUTOCOMPLETE_RESULT_DELETED_DAILY, type = Daily())
@@ -922,7 +941,7 @@ class BrowserTabViewModel @Inject constructor(
                 else -> {}
             }
             withContext(dispatchers.main()) {
-                autoCompletePublishSubject.accept(omnibarText)
+                autoCompleteStateFlow.value = omnibarText
                 command.value = AutocompleteItemRemoved
             }
         }
@@ -961,7 +980,9 @@ class BrowserTabViewModel @Inject constructor(
         }
 
         when (currentCtaViewState().cta) {
-            is DaxBubbleCta.DaxIntroSearchOptionsCta -> {
+            is DaxBubbleCta.DaxIntroSearchOptionsCta,
+            is DaxBubbleCta.DaxExperimentIntroSearchOptionsCta,
+            -> {
                 if (!ctaViewModel.isSuggestedSearchOption(query)) {
                     pixel.fire(ONBOARDING_SEARCH_CUSTOM, type = Unique())
                 }
@@ -969,6 +990,8 @@ class BrowserTabViewModel @Inject constructor(
 
             is DaxBubbleCta.DaxIntroVisitSiteOptionsCta,
             is OnboardingDaxDialogCta.DaxSiteSuggestionsCta,
+            is DaxBubbleCta.DaxExperimentIntroVisitSiteOptionsCta,
+            is OnboardingDaxDialogCta.DaxExperimentSiteSuggestionsCta,
             -> {
                 if (!ctaViewModel.isSuggestedSiteOption(query)) {
                     pixel.fire(ONBOARDING_VISIT_SITE_CUSTOM, type = Unique())
@@ -1483,7 +1506,6 @@ class BrowserTabViewModel @Inject constructor(
 
     private fun cleanupBlobDownloadReplyProxyMaps() {
         fixedReplyProxyMap.clear()
-        replyProxyMap.clear()
     }
 
     private fun setAdClickActiveTabData(url: String?) {
@@ -2136,6 +2158,8 @@ class BrowserTabViewModel @Inject constructor(
         hasFocus: Boolean,
         hasQueryChanged: Boolean,
     ) {
+        configureAutoComplete()
+
         // determine if empty list to be shown, or existing search results
         val autoCompleteSearchResults = if (query.isBlank() || !hasFocus) {
             AutoCompleteResult(query, emptyList())
@@ -2162,7 +2186,7 @@ class BrowserTabViewModel @Inject constructor(
             )
 
         if (hasFocus && autoCompleteSuggestionsEnabled) {
-            autoCompletePublishSubject.accept(query.trim())
+            autoCompleteStateFlow.value = query.trim()
         }
     }
 
@@ -2451,6 +2475,9 @@ class BrowserTabViewModel @Inject constructor(
         }
         privacyProtectionsPopupExperimentExternalPixels.tryReportProtectionsToggledFromBrowserMenu(protectionsEnabled = false)
         userAllowListRepository.addDomainToUserAllowList(domain)
+        privacyProtectionTogglePlugin.getPlugins().forEach {
+            it.onToggleOff(PrivacyToggleOrigin.MENU)
+        }
         withContext(dispatchers.main()) {
             command.value = ShowPrivacyProtectionDisabledConfirmation(domain)
             browserViewState.value = currentBrowserViewState().copy(isPrivacyProtectionDisabled = true)
@@ -2469,6 +2496,9 @@ class BrowserTabViewModel @Inject constructor(
         }
         privacyProtectionsPopupExperimentExternalPixels.tryReportProtectionsToggledFromBrowserMenu(protectionsEnabled = true)
         userAllowListRepository.removeDomainFromUserAllowList(domain)
+        privacyProtectionTogglePlugin.getPlugins().forEach {
+            it.onToggleOn(PrivacyToggleOrigin.MENU)
+        }
         withContext(dispatchers.main()) {
             command.value = ShowPrivacyProtectionEnabledConfirmation(domain)
             browserViewState.value = currentBrowserViewState().copy(isPrivacyProtectionDisabled = false)
@@ -2829,6 +2859,11 @@ class BrowserTabViewModel @Inject constructor(
                 val updatedCta = refreshCta()
                 ctaViewState.value = currentCtaViewState().copy(cta = updatedCta)
             }
+            if (cta is OnboardingDaxDialogCta.DaxExperimentFireButtonCta) {
+                pixel.fire(ONBOARDING_DAX_CTA_CANCEL_BUTTON, mapOf(PixelParameter.CTA_SHOWN to DAX_FIRE_DIALOG_CTA))
+                val updatedCta = ctaViewModel.getEndStaticDialogCta()
+                ctaViewState.value = currentCtaViewState().copy(cta = updatedCta)
+            }
         }
     }
 
@@ -3032,21 +3067,12 @@ class BrowserTabViewModel @Inject constructor(
     @SuppressLint("RequiresFeature") // it's already checked in isBlobDownloadWebViewFeatureEnabled
     private fun postMessageToConvertBlobToDataUri(url: String) {
         appCoroutineScope.launch(dispatchers.main()) { // main because postMessage is not always safe in another thread
-            if (withContext(dispatchers.io()) { androidBrowserConfig.fixBlobDownloadWithIframes().isEnabled() }) {
-                for ((key, proxies) in fixedReplyProxyMap) {
-                    if (sameOrigin(url.removePrefix("blob:"), key)) {
-                        for (replyProxy in proxies.values) {
-                            replyProxy.postMessage(url)
-                        }
-                        return@launch
+            for ((key, proxies) in fixedReplyProxyMap) {
+                if (sameOrigin(url.removePrefix("blob:"), key)) {
+                    for (replyProxy in proxies.values) {
+                        replyProxy.postMessage(url)
                     }
-                }
-            } else {
-                for ((key, value) in replyProxyMap) {
-                    if (sameOrigin(url.removePrefix("blob:"), key)) {
-                        value.postMessage(url)
-                        return@launch
-                    }
+                    return@launch
                 }
             }
         }
@@ -3261,6 +3287,9 @@ class BrowserTabViewModel @Inject constructor(
                 showDaxIcon = false,
                 showSearchIcon = false,
             )
+        if (androidBrowserConfig.errorPagePixel().isEnabled()) {
+            pixel.enqueueFire(AppPixelName.ERROR_PAGE_SHOWN)
+        }
         command.postValue(WebViewError(errorType, url))
     }
 
@@ -3385,6 +3414,7 @@ class BrowserTabViewModel @Inject constructor(
         method: String,
         id: String?,
         data: JSONObject?,
+        isActiveCustomTab: Boolean = false,
         getWebViewUrl: () -> String?,
     ) {
         when (method) {
@@ -3415,7 +3445,7 @@ class BrowserTabViewModel @Inject constructor(
             DUCK_PLAYER_FEATURE_NAME, DUCK_PLAYER_PAGE_FEATURE_NAME -> {
                 viewModelScope.launch(dispatchers.io()) {
                     val webViewUrl = withContext(dispatchers.main()) { getWebViewUrl() }
-                    val response = duckPlayerJSHelper.processJsCallbackMessage(featureName, method, id, data, webViewUrl, tabId)
+                    val response = duckPlayerJSHelper.processJsCallbackMessage(featureName, method, id, data, webViewUrl, tabId, isActiveCustomTab)
                     withContext(dispatchers.main()) {
                         response?.let {
                             command.value = it
@@ -3571,7 +3601,7 @@ class BrowserTabViewModel @Inject constructor(
     private fun onOnboardingCtaOkButtonClicked(onboardingCta: OnboardingDaxDialogCta): Command? {
         onUserDismissedCta(onboardingCta)
         return when (onboardingCta) {
-            is OnboardingDaxDialogCta.DaxSerpCta -> {
+            is OnboardingDaxDialogCta.DaxSerpCta, is OnboardingDaxDialogCta.DaxExperimentSerpCta -> {
                 viewModelScope.launch {
                     val cta = withContext(dispatchers.io()) { ctaViewModel.getSiteSuggestionsDialogCta() }
                     ctaViewState.value = currentCtaViewState().copy(cta = cta)
@@ -3585,6 +3615,9 @@ class BrowserTabViewModel @Inject constructor(
             is OnboardingDaxDialogCta.DaxTrackersBlockedCta,
             is OnboardingDaxDialogCta.DaxNoTrackersCta,
             is OnboardingDaxDialogCta.DaxMainNetworkCta,
+            is OnboardingDaxDialogCta.DaxExperimentTrackersBlockedCta,
+            is OnboardingDaxDialogCta.DaxExperimentNoTrackersCta,
+            is OnboardingDaxDialogCta.DaxExperimentMainNetworkCta,
             -> {
                 if (currentBrowserViewState().showPrivacyShield.isHighlighted()) {
                     browserViewState.value = currentBrowserViewState().copy(showPrivacyShield = HighlightableButton.Visible(highlighted = false))
@@ -3599,6 +3632,8 @@ class BrowserTabViewModel @Inject constructor(
                 null
             }
 
+            is OnboardingDaxDialogCta.DaxExperimentFireButtonCta -> LaunchFireDialogFromOnboardingDialog(onboardingCta)
+
             else -> HideOnboardingDaxDialog(onboardingCta)
         }
     }
@@ -3607,7 +3642,7 @@ class BrowserTabViewModel @Inject constructor(
         onUserDismissedCta(cta)
         return when (cta) {
             is DaxBubbleCta.DaxPrivacyProCta -> LaunchPrivacyPro("https://duckduckgo.com/pro?origin=funnel_pro_android_onboarding".toUri())
-            is DaxBubbleCta.DaxEndCta -> {
+            is DaxBubbleCta.DaxEndCta, is DaxBubbleCta.DaxExperimentEndCta -> {
                 viewModelScope.launch {
                     val updatedCta = refreshCta()
                     ctaViewState.value = currentCtaViewState().copy(cta = updatedCta)
@@ -3621,7 +3656,7 @@ class BrowserTabViewModel @Inject constructor(
     }
 
     private fun onDismissOnboardingDaxDialog(cta: OnboardingDaxDialogCta) {
-        if (cta is OnboardingDaxDialogCta.DaxTrackersBlockedCta) {
+        if (cta is OnboardingDaxDialogCta.DaxTrackersBlockedCta || cta is OnboardingDaxDialogCta.DaxExperimentTrackersBlockedCta) {
             browserViewState.value = currentBrowserViewState().copy(showPrivacyShield = HighlightableButton.Visible(highlighted = false))
         }
 
@@ -3631,9 +3666,9 @@ class BrowserTabViewModel @Inject constructor(
 
     fun onFireMenuSelected() {
         val cta = currentCtaViewState().cta
-        if (cta is OnboardingDaxDialogCta.DaxFireButtonCta) {
+        if (cta is OnboardingDaxDialogCta.DaxFireButtonCta || cta is OnboardingDaxDialogCta.DaxExperimentFireButtonCta) {
             onUserDismissedCta(cta)
-            command.value = HideOnboardingDaxDialog(cta)
+            command.value = HideOnboardingDaxDialog(cta as OnboardingDaxDialogCta)
         }
         if (currentBrowserViewState().fireButton.isHighlighted()) {
             viewModelScope.launch {
@@ -3710,8 +3745,12 @@ class BrowserTabViewModel @Inject constructor(
                 if (suggestions.any { it is AutoCompleteSearchSuggestion && it.isUrl }) {
                     pixel.fire(AppPixelName.AUTOCOMPLETE_DISPLAYED_LOCAL_WEBSITE)
                 }
+                if (suggestions.any { it is AutoCompleteSwitchToTabSuggestion }) {
+                    pixel.fire(AppPixelName.AUTOCOMPLETE_DISPLAYED_LOCAL_SWITCH_TO_TAB)
+                }
             }
             lastAutoCompleteState = null
+            autoCompleteJob.cancel()
         }
     }
 
@@ -3721,15 +3760,11 @@ class BrowserTabViewModel @Inject constructor(
         locationHref: String? = null,
     ) {
         appCoroutineScope.launch(dispatchers.io()) { // FF check has disk IO
-            if (androidBrowserConfig.fixBlobDownloadWithIframes().isEnabled()) {
-                val frameProxies = fixedReplyProxyMap[originUrl]?.toMutableMap() ?: mutableMapOf()
-                // if location.href is not passed, we fall back to origin
-                val safeLocationHref = locationHref ?: originUrl
-                frameProxies[safeLocationHref] = replyProxy
-                fixedReplyProxyMap[originUrl] = frameProxies
-            } else {
-                replyProxyMap[originUrl] = replyProxy
-            }
+            val frameProxies = fixedReplyProxyMap[originUrl]?.toMutableMap() ?: mutableMapOf()
+            // if location.href is not passed, we fall back to origin
+            val safeLocationHref = locationHref ?: originUrl
+            frameProxies[safeLocationHref] = replyProxy
+            fixedReplyProxyMap[originUrl] = frameProxies
         }
     }
 
@@ -3816,6 +3851,29 @@ class BrowserTabViewModel @Inject constructor(
 
     fun fireCustomTabRefreshPixel() {
         refreshPixelSender.sendCustomTabRefreshPixel()
+    }
+
+    fun setBrowserExperimentBackground(lightModeEnabled: Boolean) {
+        command.value = SetBrowserBackground(getBackgroundResource(lightModeEnabled))
+    }
+
+    fun setOnboardingDialogExperimentBackground(lightModeEnabled: Boolean) {
+        command.value = SetOnboardingDialogBackground(getBackgroundResource(lightModeEnabled))
+    }
+
+    private fun getBackgroundResource(lightModeEnabled: Boolean): Int {
+        return when {
+            lightModeEnabled && highlightsOnboardingExperimentManager.isHighlightsEnabled() ->
+                R.drawable.onboarding_experiment_background_bitmap_light
+            !lightModeEnabled && highlightsOnboardingExperimentManager.isHighlightsEnabled() ->
+                R.drawable.onboarding_experiment_background_bitmap_dark
+            lightModeEnabled -> R.drawable.onboarding_background_bitmap_light
+            else -> R.drawable.onboarding_background_bitmap_dark
+        }
+    }
+
+    private fun onUserSwitchedToTab(tabId: String) {
+        command.value = Command.SwitchToTab(tabId)
     }
 
     companion object {

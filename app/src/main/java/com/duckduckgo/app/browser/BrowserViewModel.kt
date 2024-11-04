@@ -292,6 +292,12 @@ class BrowserViewModel @Inject constructor(
     fun onBookmarksActivityResult(url: String) {
         command.value = Command.OpenSavedSite(url)
     }
+
+    fun onTabSelected(tabId: String) {
+        launch(dispatchers.io()) {
+            tabRepository.select(tabId)
+        }
+    }
 }
 
 /**
