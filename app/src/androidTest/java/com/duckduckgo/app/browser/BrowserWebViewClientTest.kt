@@ -424,8 +424,7 @@ class BrowserWebViewClientTest {
         whenever(mockWebView.url).thenReturn("www.duckduckgo.com")
         openInNewTabFlow.emit(Off)
 
-        assertTrue(testee.shouldOverrideUrlLoading(mockWebView, webResourceRequest))
-        verify(mockWebView).loadUrl("www.youtube.com/watch?v=1234")
+        assertFalse(testee.shouldOverrideUrlLoading(mockWebView, webResourceRequest))
         verify(mockDuckPlayer).willNavigateToDuckPlayerFromSerp()
     }
 
@@ -551,8 +550,7 @@ class BrowserWebViewClientTest {
         whenever(mockWebView.url).thenReturn("www.duckduckgo.com")
         openInNewTabFlow.emit(Off)
 
-        assertTrue(testee.shouldOverrideUrlLoading(mockWebView, webResourceRequest))
-        verify(mockWebView).loadUrl("www.youtube.com/watch?v=1234")
+        assertFalse(testee.shouldOverrideUrlLoading(mockWebView, webResourceRequest))
         verify(mockDuckPlayer).willNavigateToDuckPlayerFromSerp()
     }
 
