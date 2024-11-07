@@ -409,7 +409,7 @@ class BrowserWebViewClientTest {
 
     @UiThreadTest
     @Test
-    fun whenShouldOverrideWithShouldNavigateToDuckPlayerFromSerpThenAddQueryParam() = runTest {
+    fun whenShouldOverrideWithShouldNavigateToDuckPlayerSetOriginToSerp() = runTest {
         val urlType = SpecialUrlDetector.UrlType.ShouldLaunchDuckPlayerLink("duck://player/1234".toUri())
         whenever(specialUrlDetector.determineType(initiatingUrl = any(), uri = any())).thenReturn(urlType)
         whenever(webResourceRequest.isForMainFrame).thenReturn(true)
@@ -425,7 +425,8 @@ class BrowserWebViewClientTest {
         openInNewTabFlow.emit(Off)
 
         assertTrue(testee.shouldOverrideUrlLoading(mockWebView, webResourceRequest))
-        verify(mockWebView).loadUrl("www.youtube.com/watch?v=1234&origin=serp_auto")
+        verify(mockWebView).loadUrl("www.youtube.com/watch?v=1234")
+        verify(mockDuckPlayer).willNavigateToDuckPlayerFromSerp()
     }
 
     @Test
@@ -534,7 +535,7 @@ class BrowserWebViewClientTest {
 
     @UiThreadTest
     @Test
-    fun whenShouldOverrideWithShouldNavigateToDuckPlayerFromSerpAndOpenInNewTabThenAddQueryParam() = runTest {
+    fun whenShouldOverrideWithShouldNavigateToDuckPlayerFromSerpAndOpenInNewTabThenSetOriginToSerp() = runTest {
         val urlType = SpecialUrlDetector.UrlType.ShouldLaunchDuckPlayerLink("duck://player/1234".toUri())
         whenever(specialUrlDetector.determineType(initiatingUrl = any(), uri = any())).thenReturn(urlType)
         whenever(webResourceRequest.isForMainFrame).thenReturn(true)
@@ -551,7 +552,8 @@ class BrowserWebViewClientTest {
         openInNewTabFlow.emit(Off)
 
         assertTrue(testee.shouldOverrideUrlLoading(mockWebView, webResourceRequest))
-        verify(mockWebView).loadUrl("www.youtube.com/watch?v=1234&origin=serp_auto")
+        verify(mockWebView).loadUrl("www.youtube.com/watch?v=1234")
+        verify(mockDuckPlayer).willNavigateToDuckPlayerFromSerp()
     }
 
     @UiThreadTest
