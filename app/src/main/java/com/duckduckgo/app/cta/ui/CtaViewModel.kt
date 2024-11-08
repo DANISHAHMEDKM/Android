@@ -31,7 +31,10 @@ import com.duckduckgo.app.global.model.domain
 import com.duckduckgo.app.global.model.orderedTrackerBlockedEntities
 import com.duckduckgo.app.onboarding.store.*
 import com.duckduckgo.app.onboarding.ui.page.extendedonboarding.ExtendedOnboardingFeatureToggles
+import com.duckduckgo.app.onboarding.ui.page.extendedonboarding.ExtendedOnboardingPixelsPlugin
 import com.duckduckgo.app.onboarding.ui.page.extendedonboarding.HighlightsOnboardingExperimentManager
+import com.duckduckgo.app.onboarding.ui.page.extendedonboarding.testPrivacyProOnboardingPrimaryButtonMetricPixel
+import com.duckduckgo.app.onboarding.ui.page.extendedonboarding.testPrivacyProOnboardingShownMetricPixel
 import com.duckduckgo.app.pixels.AppPixelName.ONBOARDING_SKIP_MAJOR_NETWORK_UNIQUE
 import com.duckduckgo.app.privacy.db.UserAllowListRepository
 import com.duckduckgo.app.settings.db.SettingsDataStore
@@ -71,6 +74,7 @@ class CtaViewModel @Inject constructor(
     private val subscriptions: Subscriptions,
     private val duckPlayer: DuckPlayer,
     private val highlightsOnboardingExperimentManager: HighlightsOnboardingExperimentManager,
+    private val extendedOnboardingPixelsPlugin: ExtendedOnboardingPixelsPlugin,
 ) {
     @ExperimentalCoroutinesApi
     @VisibleForTesting
@@ -87,8 +91,8 @@ class CtaViewModel @Inject constructor(
                 }
             }
 
-    private suspend fun requiredDaxOnboardingCtas(): Array<CtaId> {
-        val shouldShowPrivacyProCta = extendedOnboardingFeatureToggles.privacyProCta().isEnabled() && subscriptions.isEligible()
+    private fun requiredDaxOnboardingCtas(): Array<CtaId> {
+        val shouldShowPrivacyProCta = extendedOnboardingFeatureToggles.testPrivacyProOnboardingCopyNov24().isEnabled()
         return if (shouldShowPrivacyProCta) {
             arrayOf(
                 CtaId.DAX_INTRO,
@@ -116,7 +120,7 @@ class CtaViewModel @Inject constructor(
         }
     }
 
-    fun onCtaShown(cta: Cta) {
+    suspend fun onCtaShown(cta: Cta) {
         cta.shownPixel?.let {
             val canSendPixel = when (cta) {
                 is DaxCta -> cta.canSendShownPixel()
@@ -128,6 +132,13 @@ class CtaViewModel @Inject constructor(
         }
         if (cta is OnboardingDaxDialogCta && cta.markAsReadOnShow) {
             dismissedCtaDao.insert(DismissedCta(cta.ctaId))
+        }
+        withContext(dispatchers.io()) {
+            if (cta is DaxBubbleCta.DaxPrivacyProCta || cta is DaxBubbleCta.DaxExperimentPrivacyProCta) {
+                extendedOnboardingPixelsPlugin.testPrivacyProOnboardingShownMetricPixel()?.getPixelDefinitions()?.forEach {
+                    pixel.fire(it.pixelName, it.params)
+                }
+            }
         }
     }
 
@@ -159,9 +170,26 @@ class CtaViewModel @Inject constructor(
         }
     }
 
-    fun onUserClickCtaOkButton(cta: Cta) {
+    suspend fun onUserClickCtaOkButton(cta: Cta) {
         cta.okPixel?.let {
             pixel.fire(it, cta.pixelOkParameters())
+        }
+        withContext(dispatchers.io()) {
+            if (cta is DaxBubbleCta.DaxPrivacyProCta || cta is DaxBubbleCta.DaxExperimentPrivacyProCta) {
+                extendedOnboardingPixelsPlugin.testPrivacyProOnboardingPrimaryButtonMetricPixel()?.getPixelDefinitions()?.forEach {
+                    pixel.fire(it.pixelName, it.params)
+                }
+            }
+        }
+    }
+
+    suspend fun onUserClickCtaSkipButton(cta: Cta) {
+        withContext(dispatchers.io()) {
+            if (cta is DaxBubbleCta.DaxPrivacyProCta || cta is DaxBubbleCta.DaxExperimentPrivacyProCta) {
+                extendedOnboardingPixelsPlugin.testPrivacyProOnboardingPrimaryButtonMetricPixel()?.getPixelDefinitions()?.forEach {
+                    pixel.fire(it.pixelName, it.params)
+                }
+            }
         }
     }
 
@@ -288,8 +316,11 @@ class CtaViewModel @Inject constructor(
     }
 
     private suspend fun canShowPrivacyProCta(): Boolean {
+        Timber.e(
+            "NOELIA canShowPrivacyProCta - ${daxOnboardingActive()} - ${!hideTips()} - ${!daxDialogPrivacyProShown()} - ${extendedOnboardingFeatureToggles.testPrivacyProOnboardingCopyNov24().isEnabled()}",
+        )
         return daxOnboardingActive() && !hideTips() && !daxDialogPrivacyProShown() &&
-            extendedOnboardingFeatureToggles.privacyProOnboardingCopyNov24().isEnabled()
+            extendedOnboardingFeatureToggles.testPrivacyProOnboardingCopyNov24().isEnabled()
     }
 
     @WorkerThread
@@ -426,12 +457,8 @@ class CtaViewModel @Inject constructor(
     private suspend fun pulseAnimationDisabled(): Boolean =
         !daxOnboardingActive() || pulseFireButtonShown() || daxDialogFireEducationShown() || hideTips()
 
-    private suspend fun allOnboardingCtasShown(): Boolean {
-        return withContext(dispatchers.io()) {
-            requiredDaxOnboardingCtas().all {
-                dismissedCtaDao.exists(it)
-            }
-        }
+    private fun allOnboardingCtasShown(): Boolean {
+        return requiredDaxOnboardingCtas().all { dismissedCtaDao.exists(it) }
     }
 
     private fun forceStopFireButtonPulseAnimationFlow() = tabRepository.flowTabs.distinctUntilChanged()

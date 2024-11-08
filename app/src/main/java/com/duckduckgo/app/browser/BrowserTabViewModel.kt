@@ -2851,7 +2851,9 @@ class BrowserTabViewModel @Inject constructor(
     }
 
     fun onUserClickCtaOkButton(cta: Cta) {
-        ctaViewModel.onUserClickCtaOkButton(cta)
+        viewModelScope.launch {
+            ctaViewModel.onUserClickCtaOkButton(cta)
+        }
         val onboardingCommand = when (cta) {
             is HomePanelCta.AddWidgetAuto, is HomePanelCta.AddWidgetInstructions -> LaunchAddWidget
             is OnboardingDaxDialogCta -> onOnboardingCtaOkButtonClicked(cta)
@@ -2866,6 +2868,7 @@ class BrowserTabViewModel @Inject constructor(
     fun onUserClickCtaSecondaryButton(cta: Cta) {
         viewModelScope.launch {
             ctaViewModel.onUserDismissedCta(cta)
+            ctaViewModel.onUserClickCtaSkipButton(cta)
             if (cta is DaxBubbleCta.DaxPrivacyProCta || cta is DaxBubbleCta.DaxExperimentPrivacyProCta) {
                 val updatedCta = refreshCta()
                 ctaViewState.value = currentCtaViewState().copy(cta = updatedCta)
