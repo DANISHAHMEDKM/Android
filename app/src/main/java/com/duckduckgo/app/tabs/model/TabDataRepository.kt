@@ -365,4 +365,8 @@ class TabDataRepository @Inject constructor(
     private fun databaseExecutor(): Scheduler {
         return Schedulers.single()
     }
+
+    override fun getTabById(tabId: String): TabEntity? {
+        return tabsDao.tab(tabId)
+    }
 }
