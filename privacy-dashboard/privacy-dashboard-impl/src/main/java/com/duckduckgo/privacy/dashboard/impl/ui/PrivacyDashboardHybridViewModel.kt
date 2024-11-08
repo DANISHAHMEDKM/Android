@@ -63,6 +63,9 @@ import com.duckduckgo.privacyprotectionspopup.api.PrivacyProtectionsPopupExperim
 import com.duckduckgo.privacyprotectionspopup.api.PrivacyProtectionsToggleUsageListener
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
+import java.util.Locale
+import javax.inject.Inject
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
 import kotlinx.coroutines.channels.Channel
@@ -83,9 +86,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import java.util.Locale
-import javax.inject.Inject
-import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @ContributesViewModel(ActivityScope::class)
@@ -112,10 +112,10 @@ class PrivacyDashboardHybridViewModel @Inject constructor(
 
     sealed class Command {
         class LaunchReportBrokenSite(val data: BrokenSiteData) : Command()
-        class LaunchToggleReport (val opener: String) : Command()
+        class LaunchToggleReport(val opener: String) : Command()
         class OpenURL(val url: String) : Command()
         class OpenSettings(val target: String) : Command()
-        class FetchToggleData(val toggleData: String): Command()
+        class FetchToggleData(val toggleData: String) : Command()
         data object GoBack : Command()
     }
 
@@ -336,7 +336,7 @@ class PrivacyDashboardHybridViewModel @Inject constructor(
         return RemoteFeatureSettingsViewState(
             primaryScreen = PrimaryScreenSettings(layout = LayoutType.DEFAULT.value),
             webBreakageForm = WebBrokenSiteFormSettings(state = webBrokenSiteFormState.value),
-            toggleReport = ToggleReportSettings(state = toggleReportState.value)
+            toggleReport = ToggleReportSettings(state = toggleReportState.value),
         )
     }
 
@@ -353,8 +353,8 @@ class PrivacyDashboardHybridViewModel @Inject constructor(
 
             delay(CLOSE_ON_PROTECTIONS_TOGGLE_DELAY)
 
-            if(!event.isProtected) {
-                //TODO: Add logic to only fire when limiter conditions met
+            if (!event.isProtected) {
+                // TODO: Add logic to only fire when limiter conditions met
                 command.send(LaunchToggleReport(opener = "dashboard"))
             }
 
@@ -492,30 +492,30 @@ class PrivacyDashboardHybridViewModel @Inject constructor(
             val siteUrl = site.url
 
             val options = ToggleReportOptions(
-                    data = listOf(
-                        ToggleReportOptions.ToggleReportOption(
-                            id = "siteUrl",
-                            additional = ToggleReportOptions.Additional(url = siteUrl)
-                        ),
-                        ToggleReportOptions.ToggleReportOption(id = "wvVersion"),
-                        ToggleReportOptions.ToggleReportOption(id = "requests"),
-                        ToggleReportOptions.ToggleReportOption(id = "features"),
-                        ToggleReportOptions.ToggleReportOption(id = "appVersion"),
-                        ToggleReportOptions.ToggleReportOption(id = "atb"),
-                        ToggleReportOptions.ToggleReportOption(id = "errorDescriptions"),
-                        ToggleReportOptions.ToggleReportOption(id = "extensionVersion"),
-                        ToggleReportOptions.ToggleReportOption(id = "httpErrorCodes"),
-                        ToggleReportOptions.ToggleReportOption(id = "lastSentDay"),
-                        ToggleReportOptions.ToggleReportOption(id = "device"),
-                        ToggleReportOptions.ToggleReportOption(id = "os"),
-                        ToggleReportOptions.ToggleReportOption(id = "reportFlow"),
-                        ToggleReportOptions.ToggleReportOption(id = "listVersions"),
-                        ToggleReportOptions.ToggleReportOption(id = "didOpenReportInfo"),
-                        ToggleReportOptions.ToggleReportOption(id = "toggleReportCounter"),
-                        ToggleReportOptions.ToggleReportOption(id = "openerContext"),
-                        ToggleReportOptions.ToggleReportOption(id = "userRefreshCount"),
-                        ToggleReportOptions.ToggleReportOption(id = "jsPerformance")
-                    )
+                data = listOf(
+                    ToggleReportOptions.ToggleReportOption(
+                        id = "siteUrl",
+                        additional = ToggleReportOptions.Additional(url = siteUrl),
+                    ),
+                    ToggleReportOptions.ToggleReportOption(id = "wvVersion"),
+                    ToggleReportOptions.ToggleReportOption(id = "requests"),
+                    ToggleReportOptions.ToggleReportOption(id = "features"),
+                    ToggleReportOptions.ToggleReportOption(id = "appVersion"),
+                    ToggleReportOptions.ToggleReportOption(id = "atb"),
+                    ToggleReportOptions.ToggleReportOption(id = "errorDescriptions"),
+                    ToggleReportOptions.ToggleReportOption(id = "extensionVersion"),
+                    ToggleReportOptions.ToggleReportOption(id = "httpErrorCodes"),
+                    ToggleReportOptions.ToggleReportOption(id = "lastSentDay"),
+                    ToggleReportOptions.ToggleReportOption(id = "device"),
+                    ToggleReportOptions.ToggleReportOption(id = "os"),
+                    ToggleReportOptions.ToggleReportOption(id = "reportFlow"),
+                    ToggleReportOptions.ToggleReportOption(id = "listVersions"),
+                    ToggleReportOptions.ToggleReportOption(id = "didOpenReportInfo"),
+                    ToggleReportOptions.ToggleReportOption(id = "toggleReportCounter"),
+                    ToggleReportOptions.ToggleReportOption(id = "openerContext"),
+                    ToggleReportOptions.ToggleReportOption(id = "userRefreshCount"),
+                    ToggleReportOptions.ToggleReportOption(id = "jsPerformance"),
+                ),
             )
             privacyDashboardPayloadAdapter.onGetToggleReportOptions(options).takeIf { it.isNotEmpty() }?.let {
                 command.send(FetchToggleData(it))
