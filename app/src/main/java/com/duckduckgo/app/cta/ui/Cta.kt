@@ -38,7 +38,6 @@ import com.duckduckgo.app.global.install.AppInstallStore
 import com.duckduckgo.app.global.install.daysInstalled
 import com.duckduckgo.app.onboarding.store.OnboardingStore
 import com.duckduckgo.app.onboarding.store.OnboardingStoreImpl.ContentType.DESCRIPTION
-import com.duckduckgo.app.onboarding.store.OnboardingStoreImpl.ContentType.PRIMARY_BUTTON
 import com.duckduckgo.app.onboarding.store.OnboardingStoreImpl.ContentType.TITLE
 import com.duckduckgo.app.pixels.AppPixelName
 import com.duckduckgo.app.settings.db.SettingsDataStore
@@ -976,7 +975,7 @@ sealed class DaxBubbleCta(
         title = onboardingStore.getPrivacyProContent(TITLE),
         description = onboardingStore.getPrivacyProContent(DESCRIPTION),
         placeholder = com.duckduckgo.mobile.android.R.drawable.ic_privacy_pro_128,
-        primaryCta = onboardingStore.getPrivacyProContent(PRIMARY_BUTTON),
+        primaryCta = R.string.onboardingPrivacyProDaxDialogOkButton,
         secondaryCta = R.string.onboardingPrivacyProDaxDialogCancelButton,
         shownPixel = AppPixelName.ONBOARDING_DAX_CTA_SHOWN,
         okPixel = AppPixelName.ONBOARDING_DAX_CTA_OK_BUTTON,
@@ -1041,7 +1040,7 @@ sealed class DaxBubbleCta(
         title = onboardingStore.getPrivacyProContent(TITLE),
         description = onboardingStore.getPrivacyProContent(DESCRIPTION),
         placeholder = com.duckduckgo.mobile.android.R.drawable.ic_privacy_pro_128,
-        primaryCta = onboardingStore.getPrivacyProContent(PRIMARY_BUTTON),
+        primaryCta = R.string.onboardingPrivacyProDaxDialogOkButton,
         secondaryCta = R.string.onboardingPrivacyProDaxDialogCancelButton,
         shownPixel = AppPixelName.ONBOARDING_DAX_CTA_SHOWN,
         okPixel = AppPixelName.ONBOARDING_DAX_CTA_OK_BUTTON,
